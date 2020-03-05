@@ -54,7 +54,10 @@ for shock in [0.1, 0.15, 0.2]:
                     continue
                 my_new_obs = MA_obs_to_bank_obs(new_obs, bank)
                 current_obs[bank_name] = my_new_obs
-                agent_dict[bank_name].step(current_obs[bank_name], actions[bank_name], rewards[bank_name], my_new_obs, dones[bank_name])
+            for bank_name, bank in env.allAgentBanks.items():
+                if bank_name in env.DefaultBanks:
+                    continue
+                agent_dict[bank_name].step(current_obs, actions[bank_name], rewards[bank_name], my_new_obs, dones[bank_name])
             current_obs = new_obs
             num_default.append(infos['NUM_DEFAULT'])
             play += 1

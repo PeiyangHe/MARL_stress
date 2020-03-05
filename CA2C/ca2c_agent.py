@@ -2,7 +2,7 @@ import numpy as np
 import random
 import copy
 from collections import namedtuple, deque
-
+from utils.tools import MA_obs_to_bank_obs
 from CA2C.ca2c_model import Actor, Centralized_Critic
 
 import torch
@@ -25,8 +25,8 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 class CA2C_Agent:
     """Interacts with and learns from the environment."""
 
-    def __init__(self, state_size, action_size, random_seed,
-                 num_agents=1, critic_local=None, critic_target=None, name=None):
+    def __init__(self, state_size, action_size, critic_local, critic_target,
+                 num_agents=1, random_seed=0, name=None):
         """Initialize an Agent object.
 
         Params
@@ -39,8 +39,6 @@ class CA2C_Agent:
         self.state_size = state_size
         self.action_size = action_size
         self.seed = random.seed(random_seed)
-        self.critic_local = critic_local
-        self.critic_target = critic_target
         self.num_agents = num_agents
 
         # Actor Network (w/ Target Network)
@@ -49,8 +47,8 @@ class CA2C_Agent:
         self.actor_optimizer = optim.Adam(self.actor_local.parameters(), lr=LR_ACTOR)
 
         # # Critic Network (w/ Target Network)
-        # self.critic_local = Critic(state_size, action_size, random_seed).to(device)
-        # self.critic_target = Critic(state_size, action_size, random_seed).to(device)
+        self.critic_local = critic_local
+        self.critic_target = critic_target
         self.critic_optimizer = optim.Adam(self.critic_local.parameters(), lr=LR_CRITIC, weight_decay=WEIGHT_DECAY)
 
         # Replay memory
@@ -62,17 +60,14 @@ class CA2C_Agent:
         self.memory.add(states, actions, rewards, next_states, dones)
 
         # Learn, if enough samples are available in memory
+
         if len(self.memory) > BATCH_SIZE:
             experiences = self.memory.sample()
             self.learn(experiences, GAMMA)
 
-    def act(self, states):
+    def act(self, state):
         """Returns actions for given state as per current policy."""
-        obs_concacted = np.asarray([])
-        for k in range(self.num_agents):
-            # print(states[int(k)])
-            obs_concacted = np.concatenate((obs_concacted, states[int(k)]))
-        state = torch.from_numpy(obs_concacted).float().to(device)
+        state = torch.from_numpy(state).float().to(device)
         self.actor_local.eval()
         with torch.no_grad():
             action = self.actor_local(state).cpu().data.numpy()
@@ -97,13 +92,20 @@ class CA2C_Agent:
 
         # ---------------------------- update critic ---------------------------- #
         # Get predicted next-state actions and Q values from target models
-        actions_next = self.actor_target(next_states_concat)
-        Q_targets_next = self.critic_target(next_states_concat, actions_concat)
+        actions_next = self.actor_target(next_states_concat.view(BATCH_SIZE * self.num_agents,-1))
+        self_index=[i for i in range(BATCH_SIZE * self.num_agents) if i % self.num_agents == self.name]
+        other_index=[i for i in range(BATCH_SIZE * self.num_agents) if i % self.num_agents != self.name]
+        self_action_next=actions_next[self_index,:]
+        other_action_next=actions_next[other_index,:].view(BATCH_SIZE,-1)
+        self_action_expect=actions_concat.view(BATCH_SIZE * self.num_agents,-1)[self_index,:]
+        other_action_expect=actions_concat.view(BATCH_SIZE * self.num_agents,-1)[other_index,:].view(BATCH_SIZE,-1)
+        Q_targets_next = self.critic_target(torch.cat((next_states_concat,other_action_next),dim=1).to(device), self_action_next)
         # Compute Q targets for current states (y_i)
         Q_targets = rewards_concat + (gamma * Q_targets_next * (1 - dones_concat))
         # Compute critic loss
-        Q_expected = self.critic_local(states_concat, actions_concat)
-        critic_loss = F.mse_loss(Q_expected, Q_targets)
+        Q_expected = self.critic_local(torch.cat((states_concat,other_action_expect),dim=1).to(device), self_action_expect)
+        huber_loss = torch.nn.SmoothL1Loss()
+        critic_loss = huber_loss(Q_expected, Q_targets.detach())
         # Minimize the loss
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
@@ -111,11 +113,11 @@ class CA2C_Agent:
 
         # ---------------------------- update actor ---------------------------- #
         # Compute actor loss
-        actions_pred_concat = np.asarray([])
-        for k in range(self.num_agents):
-            actions_pred = np.asarray(self.actor_local(states[self.name]))
-            actions_pred_concat = np.concatenate((actions_pred_concat, actions_pred))
-        actor_loss = -self.critic_local(states_concat, actions_pred_concat)
+        states_self=states_concat.view(BATCH_SIZE * self.num_agents, -1)[self_index,:]
+        actions_pred_self=self.actor_local(states_self)
+        next_states_other=next_states_concat.view(BATCH_SIZE * self.num_agents, -1)[other_index, :]
+        actions_pred_other = self.actor_local(next_states_other).view(BATCH_SIZE,-1).detach()
+        actor_loss = -self.critic_local(torch.cat((states_concat,actions_pred_other),dim=1), actions_pred_self).mean()
         # Minimize the loss
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
@@ -162,15 +164,13 @@ class ReplayBuffer:
     def sample(self):
         """Randomly sample a batch of experiences from memory."""
         experiences = random.sample(self.memory, k=self.batch_size)
-
-        states = torch.from_numpy(np.asarray([concact_for_agent(e.state) for e in experiences if e is not None], dtype='float64')).float().to(device)
-        actions = torch.from_numpy(np.asarray([concact_for_agent(e.action) for e in experiences if e is not None], dtype='float64')).float().to(device)
-        rewards = torch.from_numpy(np.asarray([concact_for_agent(e.reward) for e in experiences if e is not None], dtype='float64')).float().to(device)
-        next_states = torch.from_numpy(np.asarray([concact_for_agent(e.next_state) for e in experiences if e is not None], dtype='float64')).float().to(
+        states = torch.from_numpy(np.asarray([np.concatenate(list(e.state.values())) for e in experiences if e is not None], dtype='float64')).float().to(device)
+        actions = torch.from_numpy(np.asarray([np.concatenate(list(e.action.values())) for e in experiences if e is not None], dtype='float64')).float().to(device)
+        rewards = torch.from_numpy(np.asarray([list(e.reward.values()) for e in experiences if e is not None], dtype='float64')).float().to(device)
+        next_states = torch.from_numpy(np.asarray([np.concatenate(list(e.next_state.values())) for e in experiences if e is not None], dtype='float64')).float().to(
             device)
-        dones = torch.from_numpy(np.asarray([concact_for_agent(e.done) for e in experiences if e is not None], dtype='float64').astype(np.uint8)).float().to(
+        dones = torch.from_numpy(np.asarray([list(e.done.values()) for e in experiences if e is not None], dtype='float64').astype(np.uint8)).float().to(
             device)
-
 
         return (states, actions, rewards, next_states, dones)
 

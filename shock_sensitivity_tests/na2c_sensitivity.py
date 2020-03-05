@@ -1,22 +1,22 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-from environment.BankSimEnv import CollaborativeBankSimEnv
+from environment.BankSimEnv import BankSimEnv
 from Naive_MARL.NaiveA2C.ddpg_agent import Agent
 from utils.tools import MA_obs_to_bank_obs
 from config import GAME_PARAMS
 
 
-def sp_sensitivity_impact(impact_ls = (0.001 * x for x in range(0, 200, 5))):
+def na2c_sensitivity_shock(shocks = (0.001 * x for x in range(0, 200, 5))):
     # loop over shocks
     eoe_equities = []
-    for l in impact_ls:
+    for shock in shocks:
         agent_dict = {}
-        env = CollaborativeBankSimEnv(shock=0.05, Cifuentes_Impact_lambda=l)
+        env = BankSimEnv(shock)
         env.reset()
 
         bank_names = list(env.allAgentBanks.keys())
-        print(f'Cifuentes_Impact_lambda = {l}! All {len(bank_names)} participants are: {bank_names}.')
+        print(f'Game shock = {shock}! All {len(bank_names)} participants are: {bank_names}.')
         for idx, name in enumerate(bank_names):
             agent = Agent(state_size=6, action_size=2, random_seed=0, name=name)
             agent_dict[name] = agent
@@ -25,7 +25,7 @@ def sp_sensitivity_impact(impact_ls = (0.001 * x for x in range(0, 200, 5))):
         average_lifespans = []
         total_equities = []
         for episode in range(GAME_PARAMS.EPISODES):
-            total=np.sum([bank.get_equity_value() for bank in env.allAgentBanks.values()])
+            total = np.sum([bank.get_equity_value() for bank in env.allAgentBanks.values()])
             if episode == 0 or episode % round_to_print == 0:
                 # print(f'=========================================Episode {episode}===============================================')
                 a = 1
@@ -70,17 +70,16 @@ def sp_sensitivity_impact(impact_ls = (0.001 * x for x in range(0, 200, 5))):
         eoe_equity = np.asarray(total_equities).max()
         eoe_equities.append(eoe_equity)
     return eoe_equities
+#print(eoe_equities)
+#plt.plot(impact_ls, eoe_equities)
 
-# print(eoe_equities)
-# plt.plot(impact_ls, eoe_equities)
-#
-# fig, ax = plt.subplots()
-# ax.plot(impact_ls, eoe_equities)
-# ax.set(xlabel='initial asset shock', ylabel='Cifuentes impact lambda',
-#        title='Relation of impact and equity for Naive A2C, five agents')
-# # ax.set(xlabel='initial asset shock', ylabel='end of episode equity',
-# #        title=f'Heuristic Action buffer = {0.045}, five agents')
-# # ax.grid()
+#fig, ax = plt.subplots()
+#ax.plot(impact_ls, eoe_equities)
+#ax.set(xlabel='initial asset shock', ylabel='end of episode equity',
+#       title='Relation of shock and equity for Naive A2C, five agents')
+# ax.set(xlabel='initial asset shock', ylabel='end of episode equity',
+#        title=f'Heuristic Action buffer = {0.045}, five agents')
+# ax.grid()
 
 
 

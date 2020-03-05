@@ -117,7 +117,7 @@ class BankSimEnv:#(MultiAgentEnv):
         new_prices = self.AssetMarket.process_orders(self.allAgentBanks, action_dict)
         for bank_name, bank in name_bank_list:
             if bank_name in self.DefaultBanks:
-                continue
+                pass
             if bank.alive is True:
                 bank.BS.Liability['LOAN'].Quantity -= self.AssetMarket.convert_to_cash(bank, action_dict[bank_name])
                 bank.BS.sell_action(action_dict[bank_name])
@@ -153,6 +153,7 @@ class BankSimEnv:#(MultiAgentEnv):
             infos['TOTAL_EQUITY'] += bank.get_equity_value()
 
         self.Day += 1
+
         return obs, rewards, dones, infos
 
 

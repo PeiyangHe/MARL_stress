@@ -177,7 +177,6 @@ class ReplayBuffer:
     def sample(self):
         """Randomly sample a batch of experiences from memory."""
         experiences = random.sample(self.memory, k=self.batch_size)
-
         states = torch.from_numpy(np.asarray([e.state for e in experiences if e is not None], dtype='float64')).float().to(device)
         actions = torch.from_numpy(np.asarray([e.action for e in experiences if e is not None], dtype='float64')).float().to(device)
         rewards = torch.from_numpy(np.asarray([e.reward for e in experiences if e is not None], dtype='float64')).float().to(device)
