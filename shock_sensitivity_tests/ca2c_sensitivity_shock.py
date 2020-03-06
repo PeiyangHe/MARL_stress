@@ -7,7 +7,7 @@ from utils.tools import MA_obs_to_bank_obs
 from config import GAME_PARAMS
 
 
-
+print('ca2c_shock')
 # loop over shocks
 eoe_equities = []
 shocks = [0.001 * x for x in range(0, 200, 5)]
@@ -74,7 +74,7 @@ for shock in shocks:
                 total_equities.append(infos['TOTAL_EQUITY']/total)
     eoe_equity = np.asarray(total_equities).max()
     eoe_equities.append(eoe_equity)
-path=os.path.join('/Users/Tony/OneDrive - Nexus365/Career/RL Research', 'ca2c_sensitivity_shock.txt')
+path=os.path.join('/home/tonyairhe_gmail_com', 'ca2c_sensitivity_shock.txt')
 np.savetxt(path, eoe_equities)
 
 #fig, ax = plt.subplots()

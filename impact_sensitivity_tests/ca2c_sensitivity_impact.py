@@ -6,7 +6,7 @@ from CA2C.ca2c_agent import CA2C_Agent, Centralized_Critic
 from utils.tools import MA_obs_to_bank_obs
 from config import GAME_PARAMS
 
-
+print('ca2c_impact')
 # loop over shocks
 eoe_equities = []
 impact_ls=[0.001 * x for x in range(0, 200, 5)]
@@ -76,7 +76,7 @@ for l in impact_ls:
                 total_equities.append(infos['TOTAL_EQUITY']/total)
     eoe_equity = np.asarray(total_equities).max()
     eoe_equities.append(eoe_equity)
-path=os.path.join('/Users/Tony/OneDrive - Nexus365/Career/RL Research', 'ca2c_sensitivity_impact.txt')
+path=os.path.join('/home/tonyairhe_gmail_com', 'ca2c_sensitivity_impact.txt')
 np.savetxt(path, eoe_equities)
 
 

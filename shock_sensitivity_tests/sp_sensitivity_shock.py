@@ -6,6 +6,8 @@ from Naive_MARL.NaiveA2C.ddpg_agent import Agent
 from utils.tools import MA_obs_to_bank_obs
 from config import GAME_PARAMS
 
+print('sp_shock')
+
 
 # loop over shocks
 eoe_equities = []
@@ -70,7 +72,7 @@ for shock in shocks:
 
     eoe_equity = np.asarray(total_equities).max()
     eoe_equities.append(eoe_equity)
-path=os.path.join('/Users/Tony/OneDrive - Nexus365/Career/RL Research', 'sp_sensitivity_shock.txt')
+path=os.path.join('/home/tonyairhe_gmail_com', 'sp_sensitivity_shock.txt')
 np.savetxt(path, eoe_equities)
 
 # print(eoe_equities)

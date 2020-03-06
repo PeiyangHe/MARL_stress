@@ -9,6 +9,7 @@ from utils.tools import MA_obs_to_bank_obs
 from config import GAME_PARAMS
 
 
+print('ha_impact')
 # loop over shocks
 eoe_equities = []
 impact_ls=[0.001 * x for x in range(0, 200, 5)]
@@ -73,7 +74,7 @@ for l in impact_ls:
                 total_equities.append(infos['TOTAL_EQUITY']/total)
     eoe_equity = np.asarray(total_equities).max()
     eoe_equities.append(eoe_equity)
-path=os.path.join('/Users/Tony/OneDrive - Nexus365/Career/RL Research', 'ha_sensitivity_impact.txt')
+path=os.path.join('/home/tonyairhe_gmail_com', 'ha_sensitivity_impact.txt')
 np.savetxt(path, eoe_equities)
 
 
