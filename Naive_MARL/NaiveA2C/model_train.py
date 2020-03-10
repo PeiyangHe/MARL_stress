@@ -36,9 +36,9 @@ for shock in [0]:
                         f'Round {play}. Bank {bank_name}, CB: {int(bank.BS.Asset["CB"].Quantity)}, GB: {int(bank.BS.Asset["GB"].Quantity)}',
                         f'EQUITY: {int(bank.get_equity_value())}, ASSET: {int(bank.get_asset_value())}, LIABILITY: {int(bank.get_liability_value())}, LEV: {int(bank.get_leverage_ratio() * 10000)} bps')
                 if bank_name in env.DefaultBanks:
-                    continue
-               # conversion
-                my_obs = MA_obs_to_bank_obs(current_obs, bank)
+                    my_obs = np.asarray([0, 0, 0, 0, 0, 0])
+                else:
+                    my_obs = MA_obs_to_bank_obs(current_obs, bank)
                 current_obs[bank_name] = my_obs
                 # choose action
                 actions[bank_name] = agent_dict[bank_name].act(current_obs[bank_name].astype(float), add_noise=True, eps=0.005)
@@ -50,14 +50,16 @@ for shock in [0]:
                 action_dict['CB'], action_dict['GB'] = action[0], action[1]
                 actions_dict[name] = action_dict
             new_obs, rewards, dones, infos = env.step(actions_dict)
+            my_new_obs={}
+            for bank_name, bank in env.allAgentBanks.items():
+                if bank_name in env.DefaultBanks:
+                    my_new_obs[bank_name]=np.asarray([0,0,0,0,0,0])
+                else:
+                    my_new_obs[bank_name] = MA_obs_to_bank_obs(new_obs, bank)
             for bank_name, bank in env.allAgentBanks.items():
                 if bank_name in env.DefaultBanks:
                     continue
-                my_new_obs = MA_obs_to_bank_obs(new_obs, bank)
-            for bank_name, bank in env.allAgentBanks.items():
-                if bank_name in env.DefaultBanks:
-                    continue
-                agent_dict[bank_name].step(current_obs[bank_name], actions[bank_name], rewards[bank_name], my_new_obs, dones[bank_name])
+                agent_dict[bank_name].step(current_obs[bank_name], actions[bank_name], rewards[bank_name], my_new_obs[bank_name], dones[bank_name])
             current_obs = new_obs
             num_default.append(infos['NUM_DEFAULT'])
             play += 1

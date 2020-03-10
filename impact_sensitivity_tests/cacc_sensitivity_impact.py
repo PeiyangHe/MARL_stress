@@ -1,16 +1,19 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from environment.BankSimEnv import BankSimEnv
-from CACC.new import CACC_Agent
+from CACC.cacc_agent import CACC_Agent
 from utils.plot_utils import setup_matplotlib, plot_custom_errorbar_plot
 from config import GAME_PARAMS
 from utils.tools import MA_obs_to_bank_obs
 
 
-
-for shock in [0.1, 0.15, 0.2]:
+print('cacc_impact')
+# loop over shocks
+eoe_equities = []
+impact_ls=[0.001 * x for x in range(0, 200, 5)]
+for l in impact_ls:
     agent_dict = {}
-    env = BankSimEnv(shock)
+    env = BankSimEnv(shock=0.05, Cifuentes_Impact_lambda=l)
     env.reset()
     num_agents=5
 
@@ -25,8 +28,8 @@ for shock in [0.1, 0.15, 0.2]:
     round_to_print = 50
     average_lifespans = []
     total_equities = []
-    for episode in range(GAME_PARAMS.EPISODES):
-
+    for episode in range(1000):
+        total = np.sum([bank.get_equity_value() for bank in env.allAgentBanks.values()])
         if episode == 0 or episode % round_to_print == 0:
             print(f'=========================================Episode {episode}===============================================')
         current_obs = env.reset()
@@ -54,7 +57,7 @@ for shock in [0.1, 0.15, 0.2]:
             for bank_name, bank in env.allAgentBanks.items():
                 if bank_name in env.DefaultBanks:
                     new_obs_dict[bank_name] = np.asarray([0, 0, 0, 0, 0, 0])
-                    print(f'Round:{play}, Bank:{bank_name}')
+                    #print(f'Round:{play}, Bank:{bank_name}')
                 else:
                     new_obs_dict[bank_name] = MA_obs_to_bank_obs(new_obs, bank)
             cacc_agent.step(current_obs, actions, rewards, new_obs_dict, dones)
@@ -63,27 +66,9 @@ for shock in [0.1, 0.15, 0.2]:
             play += 1
             if play == max_play:
                 # print(infos['AVERAGE_LIFESPAN'])
-                average_lifespans.append(infos['AVERAGE_LIFESPAN'])
-                total_equities.append(infos['TOTAL_EQUITY'])
-
-    setup_matplotlib()
-    av_step = 100
-    x_points = int(len(average_lifespans)/av_step)
-    fig, axs = plt.subplots(1, 2, figsize=(12, 6))
-    plt.sca(axs[0])
-    average_lifespans = np.array(average_lifespans).reshape(x_points, av_step)
-    means_avg_lifespans = np.mean(average_lifespans, axis=1)
-    stds_avg_lifespans = np.std(average_lifespans, axis=1)
-    plot_custom_errorbar_plot(range(x_points), means_avg_lifespans, stds_avg_lifespans)
-    plt.xlabel(f'Num episode / {av_step}')
-    plt.ylabel('Avg life span of all banks')
-    plt.sca(axs[1])
-    total_equities = np.array(total_equities).reshape(x_points, av_step)
-    means_total_equities = np.mean(total_equities, axis=1)
-    stds_total_equities = np.std(total_equities, axis=1)
-    plot_custom_errorbar_plot(range(x_points), means_total_equities, stds_total_equities)
-    plt.xlabel(f'Num episode / {av_step}')
-    plt.ylabel('End of episode system total equity')
-    fig.suptitle(f'Learning behavior: simulation with {len(list(agent_dict.keys()))} banks')
-    plt.subplots_adjust(top=0.85)
-    plt.show()
+                total_equities.append(infos['TOTAL_EQUITY'] / total)
+           
+    eoe_equity = np.asarray(total_equities)[-1]
+    eoe_equities.append(eoe_equity)
+path = '/home/tonyairhe_gmail_com/cacc_sensitivity_impact.txt'
+np.savetxt(path, eoe_equities)

@@ -74,7 +74,7 @@ for l in impact_ls:
                 # print(infos['AVERAGE_LIFESPAN'])
                 average_lifespans.append(infos['AVERAGE_LIFESPAN'])
                 total_equities.append(infos['TOTAL_EQUITY']/total)
-    eoe_equity = np.asarray(total_equities).max()
+    eoe_equity = np.asarray(total_equities)[-1]
     eoe_equities.append(eoe_equity)
 path=os.path.join('/home/tonyairhe_gmail_com', 'ca2c_sensitivity_impact.txt')
 np.savetxt(path, eoe_equities)
