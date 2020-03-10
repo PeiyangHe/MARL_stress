@@ -74,7 +74,7 @@ def ha_sensitivity_impact(target, percent):
                     total_equities.append(infos['TOTAL_EQUITY']/total)
         eoe_equity = np.asarray(total_equities).max()
         eoe_equities.append(eoe_equity)
-    path=os.path.join('/home/tonyairhe_gmail_com', str(target*100)+'_'+str(percent*100)+'_'+'ha_sensitivity_impact.txt')
+    path='/Users/Tony/OneDrive - Nexus365/Career/RL Research/Analysis/'+ str(target*100)+'_'+str(percent*100)+'_'+'ha_sensitivity_impact.txt'
     np.savetxt(path, eoe_equities)
 
 

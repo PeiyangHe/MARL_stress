@@ -8,8 +8,8 @@ from utils.plot_utils import setup_matplotlib, plot_custom_errorbar_plot
 from utils.tools import MA_obs_to_bank_obs
 from config import GAME_PARAMS
 
-print('ha_shock')
 
+print('ha_shock')
 def ha_sensitivity_shock(target, percent):
     # loop over shocks
     eoe_equities = []
@@ -76,7 +76,7 @@ def ha_sensitivity_shock(target, percent):
         eoe_equity = np.asarray(total_equities).max()
         eoe_equities.append(eoe_equity)
 
-    path=os.path.join('/home/tonyairhe_gmail_com', str(target*100)+'_'+str(percent*100)+'_'+'ha_sensitivity_shock.txt')
+    path='/Users/Tony/Desktop/'+ str(target*100)+'_'+str(percent*100)+'_'+'ha_sensitivity_shock.txt'
     np.savetxt(path, eoe_equities)
 
 # print(eoe_equities)

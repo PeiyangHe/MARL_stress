@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from environment.BankSimEnv import BankSimEnv
-from CA2C.ca2c_agent import CA2C_Agent, Centralized_Critic, ReplayBuffer
+from CACC.cacc_agent import CACC_Agent, Centralized_Critic, ReplayBuffer
 from utils.plot_utils import setup_matplotlib, plot_custom_errorbar_plot
 from config import GAME_PARAMS
 from utils.tools import MA_obs_to_bank_obs
@@ -12,13 +12,14 @@ for shock in [0.1, 0.15, 0.2]:
     agent_dict = {}
     env = BankSimEnv(shock)
     env.reset()
-    local_critic, update_critic = Centralized_Critic(6, 2, seed=0, num_agents=5), Centralized_Critic(6, 2, seed=0, num_agents=5)
+    num_agents=5
+    local_critic, update_critic = Centralized_Critic(6, 2, 0, num_agents), Centralized_Critic(6, 2, 0, num_agents)
     memory=ReplayBuffer(2, buffer_size=10000, batch_size=16, seed=0)
 
     bank_names = list(env.allAgentBanks.keys())
     print(f'Game simulations starting! All {len(bank_names)} participants are: {bank_names}.')
     for idx, name in enumerate(bank_names):
-        agent = CA2C_Agent(6, 2, local_critic, update_critic, memory, num_agents=5, random_seed=0, name=name)
+        agent = CACC_Agent(6, 2, local_critic, update_critic, memory, num_agents, random_seed=0, name=name)
         agent_dict[name] = agent
 
 
@@ -29,7 +30,7 @@ for shock in [0.1, 0.15, 0.2]:
         if episode == 0 or episode % round_to_print == 0:
             print(f'=========================================Episode {episode}===============================================')
         current_obs = env.reset()
-        play, max_play = 0, 10
+        play, max_play = 0, 5
         num_default = []
         while play < GAME_PARAMS.MAX_PLAY:
             actions = {}
@@ -42,9 +43,10 @@ for shock in [0.1, 0.15, 0.2]:
                      print(f'Round {play}. Bank {bank_name}, CB: {int(bank.BS.Asset["CB"].Quantity)}, GB: {int(bank.BS.Asset["GB"].Quantity)}',
                         f'EQUITY: {int(bank.get_equity_value())}, ASSET: {int(bank.get_asset_value())}, LIABILITY: {int(bank.get_liability_value())}, LEV: {int(bank.get_leverage_ratio() * 10000)} bps')
                 current_obs[bank_name] = my_obs
+            obs = np.concatenate([current_obs[name] for name in range(num_agents)])
             # choose action
             for bank_name, bank in env.allAgentBanks.items():
-                actions[bank_name] = agent_dict[bank_name].act(current_obs[bank_name])
+                actions[bank_name] = agent_dict[bank_name].act(obs, bank_name)
 #                print(episode, play, bank_name, actions[bank_name])
             # convert actions
             actions_dict = {}
@@ -53,13 +55,14 @@ for shock in [0.1, 0.15, 0.2]:
                 action_dict['CB'], action_dict['GB'] = action[0], action[1]
                 actions_dict[name] = action_dict
             new_obs, rewards, dones, infos = env.step(actions_dict)
+            print(infos)
             new_obs_dict = {}
 
             for bank_name, bank in env.allAgentBanks.items():
                 if bank_name in env.DefaultBanks:
                     new_obs_dict[bank_name] = np.asarray([0, 0, 0, 0, 0, 0])
-                    continue
-                new_obs_dict[bank_name] = MA_obs_to_bank_obs(new_obs, bank)
+                else:
+                    new_obs_dict[bank_name] = MA_obs_to_bank_obs(new_obs, bank)
             memory.add(current_obs, actions, rewards, new_obs_dict, dones)
             for bank_name, bank in env.allAgentBanks.items():
                 if bank_name in env.DefaultBanks:

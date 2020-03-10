@@ -132,7 +132,7 @@ class BankSimEnv:#(MultiAgentEnv):
             if bank.alive == False:
                 dones[bank_name] = True
                 self.DefaultBanks.append(bank_name)
-                # print(f'Bank {bank_name} defaults! Leverage is {bank.get_leverage_ratio()}!')
+                #print(f'Bank {bank_name} defaults! Leverage is {bank.get_leverage_ratio()}!')
             else:
                 dones[bank_name] = False
 

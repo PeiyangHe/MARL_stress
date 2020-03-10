@@ -3,7 +3,7 @@ import random
 import copy
 from collections import namedtuple, deque
 from utils.tools import MA_obs_to_bank_obs
-from CA2C.ca2c_model import Actor, Centralized_Critic
+from CACC.cacc_model import Centralized_Actor, Centralized_Critic
 
 import torch
 import torch.nn.functional as F
@@ -20,7 +20,7 @@ WEIGHT_DECAY = 0  # L2 weight decay
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-class CA2C_Agent:
+class CACC_Agent():
     """Interacts with and learns from the environment."""
 
     def __init__(self, state_size, action_size, critic_local, critic_target, memory,
@@ -40,8 +40,8 @@ class CA2C_Agent:
         self.num_agents = num_agents
 
         # Actor Network (w/ Target Network)
-        self.actor_local = Actor(state_size, action_size, random_seed).to(device)
-        self.actor_target = Actor(state_size, action_size, random_seed).to(device)
+        self.actor_local = Centralized_Actor(state_size, action_size, random_seed, num_agents).to(device)
+        self.actor_target = Centralized_Actor(state_size, action_size, random_seed, num_agents).to(device)
         self.actor_optimizer = optim.Adam(self.actor_local.parameters(), lr=LR_ACTOR)
 
         # # Critic Network (w/ Target Network)
@@ -50,7 +50,7 @@ class CA2C_Agent:
         self.critic_optimizer = optim.Adam(self.critic_local.parameters(), lr=LR_CRITIC, weight_decay=WEIGHT_DECAY)
 
         # Replay memory
-        self.memory = memory
+        self.memory = ReplayBuffer(action_size, BUFFER_SIZE, BATCH_SIZE, random_seed)
 
     def step(self):
         """Save experience in replay memory, and use random sample from buffer to learn."""
@@ -62,12 +62,13 @@ class CA2C_Agent:
             experiences = self.memory.sample()
             self.learn(experiences, GAMMA)
 
-    def act(self, state):
+    def act(self, states, bank_name):
         """Returns actions for given state as per current policy."""
-        state = torch.from_numpy(state).float().to(device)
+        states = torch.from_numpy(states).float().to(device)
+        state = states.view(self.num_agents,-1)[bank_name,:]
         self.actor_local.eval()
         with torch.no_grad():
-            action = self.actor_local(state).cpu().data.numpy()
+            action = self.actor_local(states, state).cpu().data.numpy()
         self.actor_local.train()
         return np.clip(action, 0, 1)
 
@@ -89,25 +90,28 @@ class CA2C_Agent:
 
         # ---------------------------- update critic ---------------------------- #
         # Get predicted next-state actions and Q values from target models
-        self.critic_optimizer.zero_grad()
-        actions_next = self.actor_target(next_states_concat.view(BATCH_SIZE * self.num_agents,-1)).view(BATCH_SIZE,-1)
-        Q_targets_next = self.critic_target(torch.cat((next_states_concat.view(BATCH_SIZE,-1),actions_next),dim=1).to(device))
+        actions_next = self.actor_target(next_states_concat.repeat(1,self.num_agents,1).view(BATCH_SIZE*self.num_agents,-1),
+                                         next_states_concat.view(BATCH_SIZE*self.num_agents, -1))
+        Q_targets_next = self.critic_target(torch.cat((next_states_concat.view(BATCH_SIZE,-1), actions_next.view(BATCH_SIZE,-1)), dim=1).to(device))
         # Compute Q targets for current states (y_i)
         Q_targets = rewards_concat.view(BATCH_SIZE,-1) + (gamma * Q_targets_next * (1 - dones_concat.view(BATCH_SIZE,-1)))
         # Compute critic loss
-        Q_expected = self.critic_local(torch.cat((states_concat.view(BATCH_SIZE,-1),actions_concat.view(BATCH_SIZE,-1)),dim=1).to(device))
+        Q_expected = self.critic_local(torch.cat((states_concat.view(BATCH_SIZE,-1), actions_concat.view(BATCH_SIZE,-1)), dim=1).to(device))
         huber_loss = torch.nn.SmoothL1Loss()
         critic_loss = huber_loss(Q_expected, Q_targets.detach())
         # Minimize the loss
+        self.critic_optimizer.zero_grad()
         critic_loss.backward()
         self.critic_optimizer.step()
 
         # ---------------------------- update actor ---------------------------- #
         # Compute actor loss
-        self.actor_optimizer.zero_grad()
-        actions_pred=self.actor_local(states_concat.view(BATCH_SIZE * self.num_agents,-1)).view(BATCH_SIZE,-1).detach()
-        actor_loss = -self.critic_local(torch.cat((states_concat.view(BATCH_SIZE,-1),actions_pred),dim=1)).mean()
+        actions_pred = self.actor_local(
+            states_concat.repeat(1, self.num_agents, 1).view(BATCH_SIZE * self.num_agents, -1),
+            states_concat.view(BATCH_SIZE * self.num_agents, -1))
+        actor_loss = -self.critic_local(torch.cat((states_concat.view(BATCH_SIZE,-1), actions_pred.view(BATCH_SIZE,-1)), dim=1)).mean()
         # Minimize the loss
+        self.actor_optimizer.zero_grad()
         actor_loss.backward()
         self.actor_optimizer.step()
 
@@ -153,25 +157,19 @@ class ReplayBuffer:
         """Randomly sample a batch of experiences from memory."""
         experiences = random.sample(self.memory, k=self.batch_size)
         states = torch.from_numpy(
-            np.asarray([np.vstack([e.state[bank_name] for bank_name in range(len(e.state))]) for e in experiences if
-                        e is not None],
+            np.asarray([np.vstack([e.state[bank_name] for bank_name in range(len(e.state))]) for e in experiences if e is not None],
                        dtype='float64')).float().to(device)
         actions = torch.from_numpy(
-            np.asarray([np.vstack([e.action[bank_name] for bank_name in range(len(e.action))]) for e in experiences if
-                        e is not None],
+            np.asarray([np.vstack([e.action[bank_name] for bank_name in range(len(e.action))]) for e in experiences if e is not None],
                        dtype='float64')).float().to(device)
         rewards = torch.from_numpy(
-            np.asarray([np.vstack([e.reward[bank_name] for bank_name in range(len(e.reward))]) for e in experiences if
-                        e is not None],
+            np.asarray([np.vstack([e.reward[bank_name] for bank_name in range(len(e.reward))]) for e in experiences if e is not None],
                        dtype='float64')).float().to(device)
         next_states = torch.from_numpy(
-            np.asarray(
-                [np.vstack([e.next_state[bank_name] for bank_name in range(len(e.next_state))]) for e in experiences if
-                 e is not None],
-                dtype='float64')).float().to(device)
+            np.asarray([np.vstack([e.next_state[bank_name] for bank_name in range(len(e.next_state))]) for e in experiences if e is not None],
+                       dtype='float64')).float().to(device)
         dones = torch.from_numpy(
-            np.asarray([np.vstack([e.done[bank_name] for bank_name in range(len(e.done))]) for e in experiences if
-                        e is not None],
+            np.asarray([np.vstack([e.done[bank_name] for bank_name in range(len(e.done))]) for e in experiences if e is not None],
                        dtype='float64').astype(np.uint8)).float().to(device)
 
         return (states, actions, rewards, next_states, dones)

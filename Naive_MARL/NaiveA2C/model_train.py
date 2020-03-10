@@ -31,12 +31,13 @@ for shock in [0.1, 0.15, 0.2]:
         while play < GAME_PARAMS.MAX_PLAY:
             actions = {}
             for bank_name, bank in env.allAgentBanks.items():
+                if episode % round_to_print == 0:
+                    print(
+                        f'Round {play}. Bank {bank_name}, CB: {int(bank.BS.Asset["CB"].Quantity)}, GB: {int(bank.BS.Asset["GB"].Quantity)}',
+                        f'EQUITY: {int(bank.get_equity_value())}, ASSET: {int(bank.get_asset_value())}, LIABILITY: {int(bank.get_liability_value())}, LEV: {int(bank.get_leverage_ratio() * 10000)} bps')
                 if bank_name in env.DefaultBanks:
                     continue
-                if episode % round_to_print == 0:
-                     print(f'Round {play}. Bank {bank_name}, CB: {int(bank.BS.Asset["CB"].Quantity)}, GB: {int(bank.BS.Asset["GB"].Quantity)}',
-                        f'EQUITY: {int(bank.get_equity_value())}, ASSET: {int(bank.get_asset_value())}, LIABILITY: {int(bank.get_liability_value())}, LEV: {int(bank.get_leverage_ratio() * 10000)} bps')
-                # conversion
+               # conversion
                 my_obs = MA_obs_to_bank_obs(current_obs, bank)
                 current_obs[bank_name] = my_obs
                 # choose action
@@ -53,11 +54,10 @@ for shock in [0.1, 0.15, 0.2]:
                 if bank_name in env.DefaultBanks:
                     continue
                 my_new_obs = MA_obs_to_bank_obs(new_obs, bank)
-                current_obs[bank_name] = my_new_obs
             for bank_name, bank in env.allAgentBanks.items():
                 if bank_name in env.DefaultBanks:
                     continue
-                agent_dict[bank_name].step(current_obs, actions[bank_name], rewards[bank_name], my_new_obs, dones[bank_name])
+                agent_dict[bank_name].step(current_obs[bank_name], actions[bank_name], rewards[bank_name], my_new_obs, dones[bank_name])
             current_obs = new_obs
             num_default.append(infos['NUM_DEFAULT'])
             play += 1
