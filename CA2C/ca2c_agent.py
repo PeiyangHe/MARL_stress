@@ -57,6 +57,7 @@ class CA2C_Agent:
         # Save experience / reward
 
         # Learn, if enough samples are available in memory
+        #print(len(self.memory))
 
         if len(self.memory) > BATCH_SIZE:
             experiences = self.memory.sample()
@@ -91,11 +92,13 @@ class CA2C_Agent:
         # Get predicted next-state actions and Q values from target models
         self.critic_optimizer.zero_grad()
         actions_next = self.actor_target(next_states_concat.view(BATCH_SIZE * self.num_agents,-1)).view(BATCH_SIZE,-1)
-        Q_targets_next = self.critic_target(torch.cat((next_states_concat.view(BATCH_SIZE,-1),actions_next),dim=1).to(device))
+        Q_targets_next = self.critic_target(torch.cat((next_states_concat.view(BATCH_SIZE,-1),actions_next),dim=1).to(device),
+                                            actions_next.view(BATCH_SIZE, self.num_agents, -1)[:, self.name, :])
         # Compute Q targets for current states (y_i)
         Q_targets = rewards_concat.view(BATCH_SIZE,-1) + (gamma * Q_targets_next * (1 - dones_concat.view(BATCH_SIZE,-1)))
         # Compute critic loss
-        Q_expected = self.critic_local(torch.cat((states_concat.view(BATCH_SIZE,-1),actions_concat.view(BATCH_SIZE,-1)),dim=1).to(device))
+        Q_expected = self.critic_local(torch.cat((states_concat.view(BATCH_SIZE,-1),actions_concat.view(BATCH_SIZE,-1)),dim=1)
+                                       .to(device),actions_concat[:,self.name,:])
         huber_loss = torch.nn.SmoothL1Loss()
         critic_loss = huber_loss(Q_expected, Q_targets.detach())
         # Minimize the loss
@@ -107,7 +110,8 @@ class CA2C_Agent:
         # Compute actor loss
         self.actor_optimizer.zero_grad()
         actions_pred=self.actor_local(states_concat.view(BATCH_SIZE * self.num_agents,-1)).view(BATCH_SIZE,-1)
-        actor_loss = -self.critic_local(torch.cat((states_concat.view(BATCH_SIZE,-1),actions_pred),dim=1)).mean()
+        actor_loss = -self.critic_local(torch.cat((states_concat.view(BATCH_SIZE,-1),actions_pred),dim=1),
+                                        actions_pred.view(BATCH_SIZE, self.num_agents, -1)[:,self.name,:]).mean()
         # Minimize the loss\\
         actor_loss.backward()
         #print('grad\n',[param.grad for param in self.actor_local.parameters()])

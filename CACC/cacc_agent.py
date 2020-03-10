@@ -50,7 +50,7 @@ class CACC_Agent():
         self.critic_optimizer = optim.Adam(self.critic_local.parameters(), lr=LR_CRITIC, weight_decay=WEIGHT_DECAY)
 
         # Replay memory
-        self.memory = ReplayBuffer(action_size, BUFFER_SIZE, BATCH_SIZE, random_seed)
+        self.memory = memory
 
     def step(self):
         """Save experience in replay memory, and use random sample from buffer to learn."""
@@ -58,7 +58,6 @@ class CACC_Agent():
 
         # Learn, if enough samples are available in memory
         if len(self.memory) > BATCH_SIZE:
-            print('sample')
             experiences = self.memory.sample()
             self.learn(experiences, GAMMA)
 
@@ -93,11 +92,13 @@ class CACC_Agent():
         self.critic_optimizer.zero_grad()
         actions_next = self.actor_target(next_states_concat.repeat(1,self.num_agents,1).view(BATCH_SIZE*self.num_agents,-1),
                                          next_states_concat.view(BATCH_SIZE*self.num_agents, -1))
-        Q_targets_next = self.critic_target(torch.cat((next_states_concat.view(BATCH_SIZE,-1), actions_next.view(BATCH_SIZE,-1)), dim=1).to(device))
+        state_action_next=torch.cat((next_states_concat.view(BATCH_SIZE,-1), actions_next.view(BATCH_SIZE,-1)), dim=1).to(device)
+        #print('shape',state_action_next.shape)
+        Q_targets_next = self.critic_target(state_action_next, actions_next.view(BATCH_SIZE, self.num_agents, -1)[:,self.name,:])
         # Compute Q targets for current states (y_i)
         Q_targets = rewards_concat.view(BATCH_SIZE,-1) + (gamma * Q_targets_next * (1 - dones_concat.view(BATCH_SIZE,-1)))
         # Compute critic loss
-        Q_expected = self.critic_local(torch.cat((states_concat.view(BATCH_SIZE,-1), actions_concat.view(BATCH_SIZE,-1)), dim=1).to(device))
+        Q_expected = self.critic_local(torch.cat((states_concat.view(BATCH_SIZE,-1), actions_concat.view(BATCH_SIZE,-1)), dim=1).to(device), actions_concat[:,self.name,:])
         huber_loss = torch.nn.SmoothL1Loss()
         critic_loss = huber_loss(Q_expected, Q_targets.detach())
         # Minimize the loss
@@ -110,10 +111,11 @@ class CACC_Agent():
         actions_pred = self.actor_local(
             states_concat.repeat(1, self.num_agents, 1).view(BATCH_SIZE * self.num_agents, -1),
             states_concat.view(BATCH_SIZE * self.num_agents, -1))
-        actor_loss = -self.critic_local(torch.cat((states_concat.view(BATCH_SIZE,-1), actions_pred.view(BATCH_SIZE,-1)), dim=1)).mean()
+        actor_loss = -self.critic_local(torch.cat((states_concat.view(BATCH_SIZE,-1), actions_pred.view(BATCH_SIZE,-1)), dim=1),
+                                        actions_pred.view(BATCH_SIZE, self.num_agents, -1)[:,self.name,:]).mean()
         # Minimize the loss
         actor_loss.backward()
-        print('grad\n',[param.grad for param in self.actor_local.parameters()])
+        #print('grad\n',[param.grad for param in self.actor_local.parameters()])
         self.actor_optimizer.step()
 
         # ----------------------- update target networks ----------------------- #

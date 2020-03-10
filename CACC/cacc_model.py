@@ -62,7 +62,7 @@ class Centralized_Critic(nn.Module):
         self.seed = torch.manual_seed(seed)
         self.num_agents=num_agents
         self.fcs1 = nn.Linear(state_size*self.num_agents+action_size*self.num_agents, fcs1_units)
-        self.fc2 = nn.Linear(fcs1_units, fc2_units)
+        self.fc2 = nn.Linear(fcs1_units+action_size, fc2_units)
         self.fc3 = nn.Linear(fc2_units, fc3_units)
         self.fc4 = nn.Linear(fc3_units, 1)
         self.reset_parameters()
@@ -73,9 +73,9 @@ class Centralized_Critic(nn.Module):
         self.fc3.weight.data.uniform_(*hidden_init(self.fc3))
         self.fc4.weight.data.uniform_(-3e-3, 3e-3)
 
-    def forward(self, state):
+    def forward(self, state, action):
         """Build a critic (value) network that maps (state, action) pairs -> Q-values."""
         xs = torch.relu(self.fcs1(state))
-        x = torch.relu(self.fc2(xs))
+        x = torch.relu(self.fc2(torch.cat((xs,action),dim=1)))
         x = torch.relu(self.fc3(x))
         return self.fc4(x)
