@@ -29,7 +29,7 @@ for shock in [0.1, 0.15, 0.2]:
         if episode == 0 or episode % round_to_print == 0:
             print(f'=========================================Episode {episode}===============================================')
         current_obs = env.reset()
-        play, max_play = 0, 10
+        play, max_play = 0, 5
         num_default = []
         while play < GAME_PARAMS.MAX_PLAY:
             actions = {}

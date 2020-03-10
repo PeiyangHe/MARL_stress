@@ -57,8 +57,8 @@ class CACC_Agent():
         # Save experience / reward
 
         # Learn, if enough samples are available in memory
-
         if len(self.memory) > BATCH_SIZE:
+            print('sample')
             experiences = self.memory.sample()
             self.learn(experiences, GAMMA)
 
@@ -90,6 +90,7 @@ class CACC_Agent():
 
         # ---------------------------- update critic ---------------------------- #
         # Get predicted next-state actions and Q values from target models
+        self.critic_optimizer.zero_grad()
         actions_next = self.actor_target(next_states_concat.repeat(1,self.num_agents,1).view(BATCH_SIZE*self.num_agents,-1),
                                          next_states_concat.view(BATCH_SIZE*self.num_agents, -1))
         Q_targets_next = self.critic_target(torch.cat((next_states_concat.view(BATCH_SIZE,-1), actions_next.view(BATCH_SIZE,-1)), dim=1).to(device))
@@ -100,19 +101,19 @@ class CACC_Agent():
         huber_loss = torch.nn.SmoothL1Loss()
         critic_loss = huber_loss(Q_expected, Q_targets.detach())
         # Minimize the loss
-        self.critic_optimizer.zero_grad()
         critic_loss.backward()
         self.critic_optimizer.step()
 
         # ---------------------------- update actor ---------------------------- #
         # Compute actor loss
+        self.actor_optimizer.zero_grad()
         actions_pred = self.actor_local(
             states_concat.repeat(1, self.num_agents, 1).view(BATCH_SIZE * self.num_agents, -1),
             states_concat.view(BATCH_SIZE * self.num_agents, -1))
         actor_loss = -self.critic_local(torch.cat((states_concat.view(BATCH_SIZE,-1), actions_pred.view(BATCH_SIZE,-1)), dim=1)).mean()
         # Minimize the loss
-        self.actor_optimizer.zero_grad()
         actor_loss.backward()
+        print('grad\n',[param.grad for param in self.actor_local.parameters()])
         self.actor_optimizer.step()
 
         # ----------------------- update target networks ----------------------- #

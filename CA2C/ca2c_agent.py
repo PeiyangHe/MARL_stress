@@ -101,14 +101,17 @@ class CA2C_Agent:
         # Minimize the loss
         critic_loss.backward()
         self.critic_optimizer.step()
+        #print('grad\n',[param.grad for param in self.critic_local.parameters()])
 
         # ---------------------------- update actor ---------------------------- #
         # Compute actor loss
         self.actor_optimizer.zero_grad()
-        actions_pred=self.actor_local(states_concat.view(BATCH_SIZE * self.num_agents,-1)).view(BATCH_SIZE,-1).detach()
+        actions_pred=self.actor_local(states_concat.view(BATCH_SIZE * self.num_agents,-1)).view(BATCH_SIZE,-1)
         actor_loss = -self.critic_local(torch.cat((states_concat.view(BATCH_SIZE,-1),actions_pred),dim=1)).mean()
-        # Minimize the loss
+        # Minimize the loss\\
         actor_loss.backward()
+        #print('grad\n',[param.grad for param in self.actor_local.parameters()])
+
         self.actor_optimizer.step()
 
         # ----------------------- update target networks ----------------------- #

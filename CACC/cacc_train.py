@@ -55,7 +55,6 @@ for shock in [0.1, 0.15, 0.2]:
                 action_dict['CB'], action_dict['GB'] = action[0], action[1]
                 actions_dict[name] = action_dict
             new_obs, rewards, dones, infos = env.step(actions_dict)
-            print(infos)
             new_obs_dict = {}
 
             for bank_name, bank in env.allAgentBanks.items():
