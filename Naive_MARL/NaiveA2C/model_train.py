@@ -8,7 +8,7 @@ from utils.tools import MA_obs_to_bank_obs
 from config import GAME_PARAMS
 
 
-for shock in [0.1, 0.15, 0.2]:
+for shock in [0]:
     agent_dict = {}
     env = BankSimEnv(shock)
     env.reset()
@@ -22,7 +22,7 @@ for shock in [0.1, 0.15, 0.2]:
     round_to_print = 100
     average_lifespans = []
     total_equities = []
-    for episode in range(GAME_PARAMS.EPISODES):
+    for episode in range(1000):
         if episode == 0 or episode % round_to_print == 0:
             print(f'=========================================Episode {episode}===============================================')
         current_obs = env.reset()

@@ -108,7 +108,7 @@ class CACC_Agent:
                 actor_loss = -self.critic_local(torch.cat((states_concat.view(BATCH_SIZE, -1), actions_pred), dim=1),
                                                 actions_pred.view(BATCH_SIZE, self.num_agents, -1)[:, name,:]).mean()
                 actor_loss.backward()
-                #print('grad\n',[param.grad for param in agent.actor_local.parameters()])
+                print('grad\n',[param.grad for param in agent.actor_local.parameters()])
                 agent.actor_optimizer.step()
                 self.soft_update(self.critic_local, self.critic_target, TAU)
                 self.soft_update(agent.actor_local, agent.actor_target, TAU)

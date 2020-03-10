@@ -2,7 +2,6 @@ import numpy as np
 import random
 import copy
 from collections import namedtuple, deque
-from utils.tools import MA_obs_to_bank_obs
 from CA2C.ca2c_model import Actor, Centralized_Critic
 
 import torch
@@ -23,8 +22,8 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 class CA2C_Agent:
     """Interacts with and learns from the environment."""
 
-    def __init__(self, state_size, action_size, critic_local, critic_target, memory,
-                 num_agents=1, random_seed=0, name=None):
+    def __init__(self, state_size, action_size,
+                 num_agents=1, random_seed=0):
         """Initialize an Agent object.
 
         Params
@@ -33,49 +32,46 @@ class CA2C_Agent:
             action_size (int): dimension of each action
             random_seed (int): random seed
         """
-        self.name = name
         self.state_size = state_size
         self.action_size = action_size
         self.seed = random.seed(random_seed)
         self.num_agents = num_agents
 
-        # Actor Network (w/ Target Network)
-        self.actor_local = Actor(state_size, action_size, random_seed).to(device)
-        self.actor_target = Actor(state_size, action_size, random_seed).to(device)
-        self.actor_optimizer = optim.Adam(self.actor_local.parameters(), lr=LR_ACTOR)
 
         # # Critic Network (w/ Target Network)
-        self.critic_local = critic_local
-        self.critic_target = critic_target
-        self.critic_optimizer = optim.Adam(self.critic_local.parameters(), lr=LR_CRITIC, weight_decay=WEIGHT_DECAY)
+        self.critic_local = Centralized_Critic(state_size, action_size, random_seed, num_agents)
+        self.critic_target = Centralized_Critic(state_size, action_size, random_seed, num_agents)
+
+        self.agents=[DDPGAgent(state_size, action_size, self.critic_local, self.critic_target,
+                               random_seed, name=i) for i in range(num_agents)]
 
         # Replay memory
-        self.memory = memory
+        self.memory = ReplayBuffer(action_size, buffer_size=BUFFER_SIZE, batch_size=BATCH_SIZE, seed=0)
 
-    def step(self):
+    def step(self,current_obs, actions, rewards, new_obs_dict, dones):
         """Save experience in replay memory, and use random sample from buffer to learn."""
         # Save experience / reward
-
+        self.memory.add(current_obs, actions, rewards, new_obs_dict, dones)
         # Learn, if enough samples are available in memory
         #print(len(self.memory))
 
         if len(self.memory) > BATCH_SIZE:
             experiences = self.memory.sample()
-            self.learn(experiences, GAMMA)
+            self.learn(experiences, GAMMA, dones)
 
-    def act(self, state):
+    def act(self, states):
         """Returns actions for given state as per current policy."""
-        state = torch.from_numpy(state).float().to(device)
-        self.actor_local.eval()
-        with torch.no_grad():
-            action = self.actor_local(state).cpu().data.numpy()
-        self.actor_local.train()
-        return np.clip(action, 0, 1)
+        states = torch.from_numpy(states).float().to(device)
+        actions={}
+        for name, agent in enumerate(self.agents):
+            agent.actor_local.eval()
+            with torch.no_grad():
+                action = agent.actor_local(states[name,:]).cpu().data.numpy()
+            agent.actor_local.train()
+            actions[name]=(np.clip(action, 0, 1))
+        return actions
 
-    def reset(self):
-        pass
-
-    def learn(self, experiences, gamma):
+    def learn(self, experiences, gamma, dones):
         """Update policy and value parameters using given batch of experience tuples.
         Q_targets = r + γ * critic_target(next_state, actor_target(next_state))
         where:
@@ -88,39 +84,34 @@ class CA2C_Agent:
         """
         states_concat, actions_concat, rewards_concat, next_states_concat, dones_concat = experiences
 
-        # ---------------------------- update critic ---------------------------- #
-        # Get predicted next-state actions and Q values from target models
-        self.critic_optimizer.zero_grad()
-        actions_next = self.actor_target(next_states_concat.view(BATCH_SIZE * self.num_agents,-1)).view(BATCH_SIZE,-1)
-        Q_targets_next = self.critic_target(torch.cat((next_states_concat.view(BATCH_SIZE,-1),actions_next),dim=1).to(device),
-                                            actions_next.view(BATCH_SIZE, self.num_agents, -1)[:, self.name, :])
-        # Compute Q targets for current states (y_i)
-        Q_targets = rewards_concat.view(BATCH_SIZE,-1) + (gamma * Q_targets_next * (1 - dones_concat.view(BATCH_SIZE,-1)))
-        # Compute critic loss
-        Q_expected = self.critic_local(torch.cat((states_concat.view(BATCH_SIZE,-1),actions_concat.view(BATCH_SIZE,-1)),dim=1)
-                                       .to(device),actions_concat[:,self.name,:])
-        huber_loss = torch.nn.SmoothL1Loss()
-        critic_loss = huber_loss(Q_expected, Q_targets.detach())
-        # Minimize the loss
-        critic_loss.backward()
-        self.critic_optimizer.step()
-        #print('grad\n',[param.grad for param in self.critic_local.parameters()])
+        for name, agent in enumerate(self.agents):
+            if dones[name] == False:
+                # ---------------------------- update critic ---------------------------- #
+                agent.critic_optimizer.zero_grad()
+                actions_next=torch.cat([my_agent.actor_target(next_states_concat[:,my_name,:]) if dones[my_name] == False
+                                        else torch.zeros(BATCH_SIZE, self.action_size) for my_name, my_agent in enumerate(self.agents)], dim=1)
+                Q_target_next = self.critic_target(torch.cat((next_states_concat.view(BATCH_SIZE,-1), actions_next), dim=1).to(device),
+                                            actions_next.view(BATCH_SIZE, self.num_agents, -1)[:, name, :])
+                Q_target = rewards_concat[:,name,:] + (gamma * Q_target_next * (1 - dones_concat[:,name,:]))
+                Q_expected=self.critic_local(torch.cat((states_concat.view(BATCH_SIZE,-1),actions_concat.view(BATCH_SIZE,-1)),dim=1),actions_concat[:,name,:])
+                huber_loss = torch.nn.SmoothL1Loss()
+                critic_loss = huber_loss(Q_expected, Q_target.detach())
+                critic_loss.backward()
+                agent.critic_optimizer.step()
 
-        # ---------------------------- update actor ---------------------------- #
-        # Compute actor loss
-        self.actor_optimizer.zero_grad()
-        actions_pred=self.actor_local(states_concat.view(BATCH_SIZE * self.num_agents,-1)).view(BATCH_SIZE,-1)
-        actor_loss = -self.critic_local(torch.cat((states_concat.view(BATCH_SIZE,-1),actions_pred),dim=1),
-                                        actions_pred.view(BATCH_SIZE, self.num_agents, -1)[:,self.name,:]).mean()
-        # Minimize the loss\\
-        actor_loss.backward()
-        #print('grad\n',[param.grad for param in self.actor_local.parameters()])
+                # ---------------------------- update actor ---------------------------- #
+                agent.actor_optimizer.zero_grad()
+                actions_pred = torch.cat([my_agent.actor_local(states_concat[:,my_name,:]) if dones[my_name] == False
+                                        else torch.zeros(BATCH_SIZE, self.action_size) for my_name, my_agent in enumerate(self.agents)], dim=1)
+                actor_loss = -self.critic_local(torch.cat((states_concat.view(BATCH_SIZE, -1), actions_pred), dim=1),
+                                                actions_pred.view(BATCH_SIZE, self.num_agents, -1)[:, name,:]).mean()
+                actor_loss.backward()
+                agent.actor_optimizer.step()
+                self.soft_update(self.critic_local, self.critic_target, TAU)
+                self.soft_update(agent.actor_local, agent.actor_target, TAU)
 
-        self.actor_optimizer.step()
 
-        # ----------------------- update target networks ----------------------- #
-        self.soft_update(self.critic_local, self.critic_target, TAU)
-        self.soft_update(self.actor_local, self.actor_target, TAU)
+
 
     def soft_update(self, local_model, target_model, tau):
         """Soft update model parameters.
@@ -159,6 +150,7 @@ class ReplayBuffer:
     def sample(self):
         """Randomly sample a batch of experiences from memory."""
         experiences = random.sample(self.memory, k=self.batch_size)
+
         states = torch.from_numpy(
             np.asarray([np.vstack([e.state[bank_name] for bank_name in range(len(e.state))]) for e in experiences if
                         e is not None],
@@ -186,3 +178,37 @@ class ReplayBuffer:
     def __len__(self):
         """Return the current size of internal memory."""
         return len(self.memory)
+
+
+class DDPGAgent(object):
+    """
+    General class for DDPG agents (policy, critic, target policy, target
+    critic, exploration noise)
+    """
+
+    def __init__(self, state_size, action_size, critic_local, critic_target, random_seed=0, name=None):
+        """Initialize an Agent object.
+
+        Params
+        ======
+            state_size (int): dimension of each state
+            action_size (int): dimension of each action
+            random_seed (int): random seed
+        """
+        self.name = name
+        self.state_size = state_size
+        self.action_size = action_size
+        self.seed = random.seed(random_seed)
+
+        # Actor Network (w/ Target Network)
+        self.actor_local = Actor(state_size, action_size, random_seed).to(device)
+        self.actor_target = Actor(state_size, action_size, random_seed).to(device)
+        self.actor_optimizer = optim.Adam(self.actor_local.parameters(), lr=LR_ACTOR)
+
+        # Critic Network (w/ Target Network)
+        self.critic_local = critic_local
+        self.critic_target = critic_target
+        self.critic_optimizer = optim.Adam(self.critic_local.parameters(), lr=LR_CRITIC, weight_decay=WEIGHT_DECAY)
+
+
+

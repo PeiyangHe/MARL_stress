@@ -1,31 +1,31 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from environment.BankSimEnv import BankSimEnv
-from CA2C.ca2c_agent import CA2C_Agent
+from CACC.new import CACC_Agent
 from utils.plot_utils import setup_matplotlib, plot_custom_errorbar_plot
 from config import GAME_PARAMS
 from utils.tools import MA_obs_to_bank_obs
 
 
 
-for shock in [0]:
+for shock in [0.1, 0.15, 0.2]:
     agent_dict = {}
     env = BankSimEnv(shock)
     env.reset()
     num_agents=5
 
-    ca2c_agent=CA2C_Agent(6,2,num_agents)
+    cacc_agent=CACC_Agent(6,2,num_agents)
 
     bank_names = list(env.allAgentBanks.keys())
     print(f'Game simulations starting! All {len(bank_names)} participants are: {bank_names}.')
     for idx, name in enumerate(bank_names):
-        agent_dict[name] = ca2c_agent.agents[name]
+        agent_dict[name] = cacc_agent.agents[name]
 
 
     round_to_print = 50
     average_lifespans = []
     total_equities = []
-    for episode in range(1000):
+    for episode in range(GAME_PARAMS.EPISODES):
 
         if episode == 0 or episode % round_to_print == 0:
             print(f'=========================================Episode {episode}===============================================')
@@ -43,21 +43,21 @@ for shock in [0]:
                             f'EQUITY: {int(bank.get_equity_value())}, ASSET: {int(bank.get_asset_value())}, LIABILITY: {int(bank.get_liability_value())}, LEV: {int(bank.get_leverage_ratio() * 10000)} bps')
                 current_obs[bank_name] = my_obs
             obs = np.stack([current_obs[name] for name in range(num_agents)])
-            actions=ca2c_agent.act(obs)
+            actions=cacc_agent.act(obs)
             # choose action
             actions_dict={}
             for name, action in actions.items():
                 actions_dict[name] = {'CB':action[0], 'GB':action[1]}
             new_obs, rewards, dones, infos = env.step(actions_dict)
-            #print(actions_dict)
 
             new_obs_dict = {}
             for bank_name, bank in env.allAgentBanks.items():
                 if bank_name in env.DefaultBanks:
                     new_obs_dict[bank_name] = np.asarray([0, 0, 0, 0, 0, 0])
+                    print(f'Round:{play}, Bank:{bank_name}')
                 else:
                     new_obs_dict[bank_name] = MA_obs_to_bank_obs(new_obs, bank)
-            ca2c_agent.step(current_obs, actions, rewards, new_obs_dict, dones)
+            cacc_agent.step(current_obs, actions, rewards, new_obs_dict, dones)
             current_obs = new_obs
             num_default.append(infos['NUM_DEFAULT'])
             play += 1
